@@ -5,6 +5,9 @@
     build with: gcc -o writeread -Wall -g writeread.c
 */
 
+// Ref:
+// Timeout in 3 seconds, ref: https://copyprogramming.com/howto/how-can-i-implement-timeout-for-read-when-reading-from-a-serial-port-c-c
+// Base loopback code from: https://github.com/FEDEVEL/imx6rex-serial-loopback-test
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
@@ -14,28 +17,35 @@
 
 #include "serial-loopback-test.h"
 
+#include <setjmp.h>
+static jmp_buf env_alarm;
+#define TIMEOUT 10 //10seconds
+static void sig_alarm(int signo)
+{
+    longjmp(env_alarm, 1);
+}
 
 int serport_fd;
 
 void usage(char **argv)
 {
-    fprintf(stdout, "Usage:\n"); 
-    fprintf(stdout, "%s port baudrate file/string\n", argv[0]); 
-    fprintf(stdout, "Examples:\n"); 
-    fprintf(stdout, "%s /dev/ttyUSB0 115200 /path/to/somefile.txt\n", argv[0]); 
-    fprintf(stdout, "%s /dev/ttyUSB0 115200 \"some text test\"\n", argv[0]); 
+    fprintf(stdout, "Usage:\n");
+    fprintf(stdout, "%s port baudrate file/string\n", argv[0]);
+    fprintf(stdout, "Examples:\n");
+    fprintf(stdout, "%s /dev/ttyUSB0 115200 /path/to/somefile.txt\n", argv[0]);
+    fprintf(stdout, "%s /dev/ttyUSB0 115200 \"some text test\"\n", argv[0]);
 }
 
 //CTRL+C handler
 int execute;
 void trap(int signal) {execute = 0;}
 
-int main( int argc, char **argv ) 
+int main( int argc, char **argv )
 {
 
-    if( argc != 4 ) { 
+    if( argc != 4 ) {
         usage(argv);
-        return 1; 
+        return 1;
     }
 
     char *serport;
@@ -43,23 +53,23 @@ int main( int argc, char **argv )
     speed_t serspeed_t;
     char *serfstr, *recievedBytes;
     int serf_fd; // if < 0, then serfstr is a string
-    int bytesToSend; 
+    int bytesToSend;
     int sentBytes, sentBytesTotal = 0;
     char byteToSend[2];
     int readChars;
-    int recdBytes, totlBytes; 
+    int recdBytes, totlBytes;
 
     char sResp[11];
 
     struct timeval timeStart, timeEnd, timeDelta;
-    float deltasec; 
+    float deltasec;
 
     int write_failed;
     int cyclesPass = 0, cyclesFailed = 0;
 
-    /* Re: connecting alternative output stream to terminal - 
-    * http://coding.derkeiler.com/Archive/C_CPP/comp.lang.c/2009-01/msg01616.html 
-    * send read output to file descriptor 3 if open, 
+    /* Re: connecting alternative output stream to terminal -
+    * http://coding.derkeiler.com/Archive/C_CPP/comp.lang.c/2009-01/msg01616.html
+    * send read output to file descriptor 3 if open,
     * else just send to stdout
     */
     FILE *stdalt;
@@ -87,12 +97,12 @@ int main( int argc, char **argv )
     fprintf(stdout, "Got file/string '%s'; ", serfstr);
     if (serf_fd < 0) {
         bytesToSend = strlen(serfstr);
-//        fprintf(stdout, "interpreting as string (%d).\n", bytesToSend);
+        fprintf(stdout, "interpreting as string (%d).\n", bytesToSend);
     } else {
         struct stat st;
         stat(serfstr, &st);
         bytesToSend = st.st_size;
-//        fprintf(stdout, "opened as file (%d).\n", bytesToSend);
+        fprintf(stdout, "opened as file (%d).\n", bytesToSend);
     }
 
 
@@ -111,26 +121,40 @@ int main( int argc, char **argv )
 
     fprintf(stdout, "\n+++START+++\n");
 
-    fprintf(stdout, "CTRL+C to exit\n", serspeed, serspeed_t, serspeed_t);
+    fprintf(stdout, "CTRL+C to exit\n");
 
 
     //alloc number of bytes to send
     recievedBytes = (char*) malloc(sizeof(char) *  bytesToSend);
 
-    // write / read loop - interleaved (i.e. will always write 
-    // one byte at a time, before 'emptying' the read buffer ) 
-    for ( ; ; )
+   if (signal(SIGALRM, sig_alarm) == SIG_ERR)
+   {
+       exit(0);
+   }
+   if (setjmp(env_alarm) != 0)
+   {
+      //close(fd);
+      printf("Timeout Or Error\n");
+      exit(1);
+   }
+   alarm(TIMEOUT);
+
+    // write / read loop - interleaved (i.e. will always write
+    // one byte at a time, before 'emptying' the read buffer )
+    int ii = 0;
+    for ( ; ii<200; ii++)
     {
         while ( sentBytes < bytesToSend )
         {
             // read next byte from input...
             if (serf_fd < 0) { //interpreting as string
                 byteToSend[0] = serfstr[sentBytes];
-            } else { //opened as file 
+            } else { //opened as file
                 read( serf_fd, &byteToSend[0], 1 );
             }
 
             write_failed = TRUE;
+            int write_failed_count = 0;
             do
             {
                  //CTRL+C handler
@@ -141,6 +165,10 @@ int main( int argc, char **argv )
                 {
                     write_failed = TRUE;
                     fprintf(stdout, "!WARNING: Write failed.\n");
+                    cyclesFailed ++;
+                    write_failed_count ++;
+                    if(write_failed_count > 3)
+                        break;
                 } else
                     write_failed = FALSE;
             } while (write_failed == TRUE);
@@ -177,6 +205,8 @@ int main( int argc, char **argv )
         sentBytesTotal += sentBytes;
         sentBytes = 0;
     }
+    //cancel pending alarm
+    alarm(0);
 show_results:
 
     //CTRL+C handler
@@ -201,6 +231,11 @@ show_results:
 //    fprintf(stdout, "Start: %ld s %ld us; End: %ld s %ld us; Delta: %ld s %ld us. \n", timeStart.tv_sec, timeStart.tv_usec, timeEnd.tv_sec, timeEnd.tv_usec, timeDelta.tv_sec, timeDelta.tv_usec);
 //    fprintf(stdout, "%s baud for 8N1 is %d Bps (bytes/sec).\n", serspeed, atoi(serspeed)/10);
     fprintf(stdout, "Measured: write %.02f Bps, read %.02f Bps, total %.02f Bps.\n", sentBytesTotal/deltasec, recdBytes/deltasec, totlBytes/deltasec);
+
+    //Any error would be set to error
+    if(cyclesFailed != 0) {
+        return 1;
+    }
 
     return 0;
 }
