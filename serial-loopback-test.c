@@ -127,12 +127,10 @@ int main( int argc, char **argv )
     //alloc number of bytes to send
     recievedBytes = (char*) malloc(sizeof(char) *  bytesToSend);
 
-   if (signal(SIGALRM, sig_alarm) == SIG_ERR)
-   {
+   if (signal(SIGALRM, sig_alarm) == SIG_ERR) {
        exit(0);
    }
-   if (setjmp(env_alarm) != 0)
-   {
+   if (setjmp(env_alarm) != 0) {
       //close(fd);
       printf("Timeout Or Error\n");
       exit(1);
@@ -142,10 +140,8 @@ int main( int argc, char **argv )
     // write / read loop - interleaved (i.e. will always write
     // one byte at a time, before 'emptying' the read buffer )
     int ii = 0;
-    for ( ; ii<200; ii++)
-    {
-        while ( sentBytes < bytesToSend )
-        {
+    for ( ; ii<200; ii++) {
+        while ( sentBytes < bytesToSend ) {
             // read next byte from input...
             if (serf_fd < 0) { //interpreting as string
                 byteToSend[0] = serfstr[sentBytes];
@@ -155,14 +151,12 @@ int main( int argc, char **argv )
 
             write_failed = TRUE;
             int write_failed_count = 0;
-            do
-            {
+            do {
                  //CTRL+C handler
                 if(execute == 0)
                     goto show_results;
 
-                if ( !writeport( serport_fd, byteToSend ) )
-                {
+                if ( !writeport( serport_fd, byteToSend ) ) {
                     write_failed = TRUE;
                     fprintf(stdout, "!WARNING: Write failed.\n");
                     cyclesFailed ++;
