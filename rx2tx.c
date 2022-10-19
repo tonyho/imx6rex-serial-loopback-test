@@ -30,8 +30,10 @@
 //Read timeout 500s
 #define TIMEOUT 500
 
-void print_usage(char *prg)
-{
+void print_usage(char *prg) {
+    fprintf(stderr, "\nUsage: %s baud /dev/ttyUSB0 [dump]\n\n", prg);
+
+#if 0
     fprintf(stderr, "\nUsage: %s [options] tty\n\n", prg);
     fprintf(stderr, "Options: -b <baud>  (uart baud rate)\n");
     fprintf(stderr, "Options: -c <count>  (ascii count)\n");
@@ -39,6 +41,7 @@ void print_usage(char *prg)
     fprintf(stderr, "\nExample:\n");
     fprintf(stderr, "uart-loopback /dev/ttyS1\n");
     fprintf(stderr, "\n");
+#endif
     exit(1);
 }
 
@@ -105,7 +108,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    tcflush(fd, TCIFLUSH);
+    //tcflush(fd, TCIFLUSH);
 
     //for (i=33; i < count+33; i++) {
     for (;;) {
@@ -118,8 +121,8 @@ int main(int argc, char **argv) {
         if (ret==0){
             printf("read timeout error!\n");
             exit(1);
-        }
-        else {
+        } else {
+            //printf("-");
             ret=read(fd, &j, 1);
         }
 
@@ -134,7 +137,7 @@ int main(int argc, char **argv) {
         if(dump_data == 1) {
             printf("%c ", j[0]);
         } else {
-            printf(".");
+            //printf(".");
         }
         //Send back
         //ret=write(fd,&i, 1);
@@ -150,7 +153,7 @@ int main(int argc, char **argv) {
             exit(1);
         }
 #endif
-        if(counter %200 == 0) {
+        if(counter % 200 == 0) {
             printf("read count:%lu\n", counter);
         }
         //printf("%c",j[0]);
