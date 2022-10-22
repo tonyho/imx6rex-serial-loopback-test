@@ -4,3 +4,4 @@ gcc rx2tx.c -o rx2tx
 arm-linux-gnueabihf-gcc serial-loopback-test.c -o s.arm
 scphimx s.arm root@192.168.1.163:/
 scphimx s.arm root@192.168.1.163:/
+arm-linux-gnueabihf-gcc rx2tx_new.c -o r2t
